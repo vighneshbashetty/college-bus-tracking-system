@@ -1,0 +1,65 @@
+// Prisma schema for CampusTrack – mirrors backend/models.py
+// Used by Prisma Studio to browse/edit the PostgreSQL database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:postgres@localhost:5432/campusstrack"
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  password_hash String
+  role          String
+  name          String
+
+  driver_profile Driver?
+
+  @@map("users")
+}
+
+model Bus {
+  id            String   @id
+  route_id      String
+  plate         String
+  capacity      Int      @default(48)
+  occupancy     Int      @default(0)
+  speed         Float    @default(1.0)
+  status        String   @default("offline")
+  progress      Float    @default(0.0)
+  direction     Int      @default(1)
+  delay_minutes Int      @default(0)
+
+  driver    Driver?
+  locations Location[]
+
+  @@map("buses")
+}
+
+model Driver {
+  id      Int     @id @default(autoincrement())
+  user_id Int     @unique
+  name    String
+  bus_id  String? @unique
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  bus  Bus?  @relation(fields: [bus_id], references: [id], onDelete: SetNull)
+
+  @@map("drivers")
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  bus_id    String
+  x         Float
+  y         Float
+  timestamp DateTime @default(now()) @db.Timestamptz
+
+  bus Bus @relation(fields: [bus_id], references: [id], onDelete: Cascade)
+
+  @@map("locations")
+}
