@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, MapPin, Clock, Search, Star, Bus as BusIcon, Navigation } from "lucide-react";
 import TransitMap from "@/components/TransitMap";
+import GoogleTransitMap from "@/components/GoogleTransitMap";
 import { Card, OccupancyBar, SectionTitle, StatusBadge } from "@/components/ui";
 import { routes, students, allStops } from "@/data";
 import type { Arrival, Bus } from "@/types";
@@ -19,6 +20,9 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
   const [selectedStop, setSelectedStop] = useState<string | null>(me.homeStopId);
   const [selectedBus, setSelectedBus] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [useGoogleMap, setUseGoogleMap] = useState<boolean>(
+    Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY)
+  );
 
   const stopList = Object.entries(stops).filter(([, v]) =>
     v.name.toLowerCase().includes(query.toLowerCase()),
@@ -45,21 +49,58 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
             </div>
           </div>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30 px-2.5 py-1 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+
+        <div className="flex items-center gap-2">
+          {/* Map Mode Switcher Button */}
+          <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center gap-1 text-xs">
+            <button
+              onClick={() => setUseGoogleMap(true)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                useGoogleMap
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🗺️ Google Maps
+            </button>
+            <button
+              onClick={() => setUseGoogleMap(false)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                !useGoogleMap
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              📐 SVG Campus Grid
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30 px-2.5 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+          </div>
         </div>
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 p-4 sm:p-6">
         {/* map */}
         <div className="min-h-[420px] lg:min-h-0">
-          <TransitMap
-            buses={buses}
-            selectedStopId={selectedStop}
-            onSelectStop={setSelectedStop}
-            selectedBusId={selectedBus}
-            onSelectBus={setSelectedBus}
-          />
+          {useGoogleMap ? (
+            <GoogleTransitMap
+              buses={buses}
+              selectedStopId={selectedStop}
+              onSelectStop={setSelectedStop}
+              selectedBusId={selectedBus}
+              onSelectBus={setSelectedBus}
+            />
+          ) : (
+            <TransitMap
+              buses={buses}
+              selectedStopId={selectedStop}
+              onSelectStop={setSelectedStop}
+              selectedBusId={selectedBus}
+              onSelectBus={setSelectedBus}
+            />
+          )}
         </div>
 
         {/* side panel */}

@@ -11,11 +11,34 @@ function routePoint(route: Route, t: number) {
   const local = total - i;
   const a = route.stops[i];
   const b = route.stops[i + 1];
-  return { x: a.x + (b.x - a.x) * local, y: a.y + (b.y - a.y) * local };
+  const ax = a.x ?? 50;
+  const ay = a.y ?? 50;
+  const bx = b.x ?? 50;
+  const by = b.y ?? 50;
+  return { x: ax + (bx - ax) * local, y: ay + (by - ay) * local };
 }
 
 export function busPosition(bus: Bus, route: Route) {
   return routePoint(route, bus.progress);
+}
+
+// Calculate live GPS coordinates (lat, lng) along the route stops based on bus progress (0-1)
+export function busGpsPosition(bus: Bus, route: Route): { lat: number; lng: number } {
+  if (!route.stops || route.stops.length === 0) return { lat: 23.0841, lng: 76.8520 };
+  if (route.stops.length === 1) return { lat: route.stops[0].lat, lng: route.stops[0].lng };
+
+  const totalSegs = route.stops.length - 1;
+  const total = Math.max(0, Math.min(1, bus.progress)) * totalSegs;
+  const i = Math.min(Math.floor(total), totalSegs - 1);
+  const local = total - i;
+
+  const a = route.stops[i];
+  const b = route.stops[i + 1];
+
+  const lat = a.lat + (b.lat - a.lat) * local;
+  const lng = a.lng + (b.lng - a.lng) * local;
+
+  return { lat, lng };
 }
 
 // Cumulative segment lengths for accurate distance-based ETA.

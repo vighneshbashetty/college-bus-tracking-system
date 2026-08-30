@@ -3,8 +3,10 @@ export type Role = "student" | "admin";
 export interface Stop {
   id: string;
   name: string;
-  x: number; // map coords 0-100
-  y: number;
+  lat: number;
+  lng: number;
+  x?: number; // legacy map coords 0-100 fallback
+  y?: number;
 }
 
 export interface Route {
@@ -26,6 +28,8 @@ export interface Bus {
   progress: number; // 0-1 along route
   direction: 1 | -1;
   delayMinutes: number;
+  lat?: number;
+  lng?: number;
 }
 
 export interface Student {
