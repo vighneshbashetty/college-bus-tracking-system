@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = "postgresql://postgres:postgres@localhost:5432/campusstrack"
+  provider = "sqlite"
+  url      = "file:../backend/campustrack.db"
 }
 
 model User {
@@ -55,9 +55,12 @@ model Driver {
 model Location {
   id        Int      @id @default(autoincrement())
   bus_id    String
-  x         Float
-  y         Float
-  timestamp DateTime @default(now()) @db.Timestamptz
+  x         Float?
+  y         Float?
+  latitude  Float?
+  longitude Float?
+  speed     Float?
+  timestamp DateTime @default(now())
 
   bus Bus @relation(fields: [bus_id], references: [id], onDelete: Cascade)
 

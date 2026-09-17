@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from .database import Base
+from database import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -46,9 +46,27 @@ class Location(Base):
     __tablename__ = "locations"
 
     id = Column(Integer, primary_key=True, index=True)
-    bus_id = Column(String, ForeignKey("buses.id", ondelete="CASCADE"), nullable=False)
-    x = Column(Float, nullable=False)
-    y = Column(Float, nullable=False)
+    bus_id = Column(String, ForeignKey("buses.id", ondelete="CASCADE"), nullable=False, index=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    speed = Column(Float, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
     bus = relationship("Bus", back_populates="locations")
+
+class BusPass(Base):
+    __tablename__ = "bus_passes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    pass_code = Column(String, unique=True, index=True, nullable=False)
+    route_id = Column(String, nullable=False, default="ALL")
+    student_name = Column(String, nullable=False)
+    student_email = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="active")  # 'active', 'boarded', 'expired'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    scanned_at = Column(DateTime(timezone=True), nullable=True)
+    scanned_by_bus_id = Column(String, nullable=True)
+
+    user = relationship("User")
+

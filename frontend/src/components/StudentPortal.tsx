@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, MapPin, Clock, Search, Star, Bus as BusIcon, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Search, Star, Bus as BusIcon, Navigation, QrCode, LogOut, Sparkles } from "lucide-react";
 import TransitMap from "@/components/TransitMap";
 import GoogleTransitMap from "@/components/GoogleTransitMap";
+import LeafletTransitMap from "@/components/LeafletTransitMap";
+import Chatbot from "@/components/Chatbot";
+import { DigitalPassModal } from "@/components/DigitalPassModal";
+import { AIPredictionModal } from "@/components/AIPredictionModal";
 import { Card, OccupancyBar, SectionTitle, StatusBadge } from "@/components/ui";
 import { routes, students, allStops } from "@/data";
 import type { Arrival, Bus } from "@/types";
@@ -20,9 +24,12 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
   const [selectedStop, setSelectedStop] = useState<string | null>(me.homeStopId);
   const [selectedBus, setSelectedBus] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [useGoogleMap, setUseGoogleMap] = useState<boolean>(
-    Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY)
-  );
+  const [mapMode, setMapMode] = useState<"leaflet" | "google" | "svg">("leaflet");
+  const [isPassModalOpen, setIsPassModalOpen] = useState(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiModalBus, setAiModalBus] = useState<Bus | null>(null);
+  const [aiModalStop, setAiModalStop] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null);
+  const [aiModalEta, setAiModalEta] = useState<number>(3);
 
   const stopList = Object.entries(stops).filter(([, v]) =>
     v.name.toLowerCase().includes(query.toLowerCase()),
@@ -31,12 +38,24 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
   const currentArrivals = selectedStop ? arrivals(selectedStop) : [];
   const selectedBusObj = buses.find((b) => b.id === selectedBus) || null;
 
+  const handleOpenAiModal = (bus: Bus, stopId: string, eta: number) => {
+    setAiModalBus(bus);
+    const stopObj = stops[stopId] || { id: stopId, name: stopId, lat: 23.075, lng: 76.852 };
+    setAiModalStop({ id: stopId, name: stopObj.name, lat: stopObj.lat, lng: stopObj.lng });
+    setAiModalEta(eta);
+    setIsAiModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       {/* top bar */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-lg hover:bg-white/10 text-slate-300">
+          <button
+            onClick={onBack}
+            className="p-2 rounded-lg hover:bg-white/10 text-slate-300 transition-colors"
+            title="Back to Login"
+          >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-2">
@@ -51,40 +70,87 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Digital QR Pass Button */}
+          <button
+            onClick={() => setIsPassModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/25 transition-all"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Digital QR Pass</span>
+          </button>
+
           {/* Map Mode Switcher Button */}
           <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center gap-1 text-xs">
             <button
-              onClick={() => setUseGoogleMap(true)}
+              onClick={() => setMapMode("leaflet")}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                useGoogleMap
+                mapMode === "leaflet"
                   ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              🗺️ Google Maps
+              🗺️ OpenStreetMap
             </button>
             <button
-              onClick={() => setUseGoogleMap(false)}
+              onClick={() => setMapMode("google")}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
-                !useGoogleMap
+                mapMode === "google"
                   ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              📐 SVG Campus Grid
+              🌐 Google Maps
+            </button>
+            <button
+              onClick={() => setMapMode("svg")}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                mapMode === "svg"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              📐 SVG Grid
             </button>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30 px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+          <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full">
+            {api.isConnected() ? (
+              <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                🛰️ Live GPS Mode
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-amber-300 bg-amber-500/10 ring-1 ring-amber-400/30 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                🎮 Demo Mode
+              </span>
+            )}
           </div>
+
+          {/* Explicit Back to Login / Log Out Button */}
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 ring-1 ring-white/10 hover:ring-rose-500/30 text-xs font-semibold transition-all"
+            title="Log out and return to login interface"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Log Out</span>
+          </button>
         </div>
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 p-4 sm:p-6">
         {/* map */}
         <div className="min-h-[420px] lg:min-h-0">
-          {useGoogleMap ? (
+          {mapMode === "leaflet" ? (
+            <LeafletTransitMap
+              buses={buses}
+              selectedStopId={selectedStop}
+              onSelectStop={setSelectedStop}
+              selectedBusId={selectedBus}
+              onSelectBus={setSelectedBus}
+            />
+          ) : mapMode === "google" ? (
             <GoogleTransitMap
               buses={buses}
               selectedStopId={selectedStop}
@@ -173,6 +239,25 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
                       <div className="text-[11px] text-slate-500 mt-1 text-right">Crowd</div>
                     </div>
                   </div>
+                  <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                      Dynamic Factors
+                    </span>
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const bObj = buses.find((b) => b.id === a.busId) || selectedBusObj;
+                        if (bObj && selectedStop) {
+                          handleOpenAiModal(bObj, selectedStop, a.etaMinutes);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-500/30 text-[10px] font-semibold text-indigo-300 transition-colors"
+                    >
+                      <Sparkles className="w-3 h-3 text-indigo-400" />
+                      AI Smart ETA
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -181,17 +266,57 @@ export default function StudentPortal({ buses, arrivals, onBack }: Props) {
           {/* selected bus detail */}
           {selectedBusObj && (
             <Card className="p-4 ring-blue-400/30">
-              <SectionTitle icon={<Navigation className="w-4 h-4 text-blue-400" />}>Tracking {selectedBusObj.id}</SectionTitle>
+              <div className="flex items-center justify-between">
+                <SectionTitle icon={<Navigation className="w-4 h-4 text-blue-400" />}>Tracking {selectedBusObj.id}</SectionTitle>
+                {selectedBusObj.isLiveGps ? (
+                  <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full ring-1 ring-emerald-400/30">
+                    🛰️ LIVE GPS
+                  </span>
+                ) : (
+                  <span className="bg-slate-800 text-slate-400 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                    🎮 Demo Mode
+                  </span>
+                )}
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <Info label="Driver" value={selectedBusObj.driver} />
                 <Info label="Plate" value={selectedBusObj.plate} />
                 <Info label="Route" value={routes.find((r) => r.id === selectedBusObj.routeId)?.name || "—"} />
-                <Info label="Delay" value={selectedBusObj.delayMinutes ? `${selectedBusObj.delayMinutes} min` : "None"} />
+                <Info label="Telemetry" value={selectedBusObj.lat && selectedBusObj.lng ? `${selectedBusObj.lat.toFixed(4)}°, ${selectedBusObj.lng.toFixed(4)}°` : "Route Interpolated"} />
               </div>
+              <button
+                onClick={() => {
+                  handleOpenAiModal(
+                    selectedBusObj,
+                    selectedStop || "s5",
+                    3
+                  );
+                }}
+                className="w-full mt-3 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all border border-indigo-400/30"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Predict AI Delay & ETAs
+              </button>
             </Card>
           )}
         </aside>
       </div>
+
+      <DigitalPassModal
+        isOpen={isPassModalOpen}
+        onClose={() => setIsPassModalOpen(false)}
+        onLogout={onBack}
+        user={{ name: studentName, email: api.emailValue || 'student.aarav@college.edu', role: 'student' }}
+        isDemoMode={!api.isConnected()}
+      />
+      <AIPredictionModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        bus={aiModalBus}
+        stop={aiModalStop}
+        staticEtaMinutes={aiModalEta}
+      />
+      <Chatbot />
     </div>
   );
 }

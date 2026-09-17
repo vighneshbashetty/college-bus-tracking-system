@@ -165,3 +165,63 @@ Default: `http://localhost:8000`
 * **Endpoint**: `/api/locations/{bus_id}`
 * **Method**: `GET`
 * **Response**: An ordered array of the last 50 coordinates recorded for the specified bus.
+
+---
+
+## AI Delay & ETA Prediction (Machine Learning)
+
+### 1. Predict Dynamic Bus Arrival & Delay
+* **Endpoint**: `/api/ai/predict-eta`
+* **Method**: `POST`
+* **Request Body**:
+  ```json
+  {
+    "bus_id": "BUS-101",
+    "stop_id": "s5",
+    "weather": "clear",
+    "traffic_level": "moderate"
+  }
+  ```
+* **Response**:
+  ```json
+  {
+    "bus_id": "BUS-101",
+    "stop_id": "s5",
+    "stop_name": "AB2",
+    "route_id": "R1",
+    "predicted_eta_minutes": 4.2,
+    "baseline_eta_minutes": 2.1,
+    "predicted_delay_minutes": 2.1,
+    "delay_risk": "moderate",
+    "confidence": 0.95,
+    "distance_meters": 680.0,
+    "stops_remaining": 2,
+    "current_speed": 1.3,
+    "weather": "clear",
+    "traffic_level": "moderate",
+    "factors": [
+      {
+        "factor": "Traffic (Moderate)",
+        "category": "traffic",
+        "impact_minutes": 0.4,
+        "description": "Intermittent campus internal road crossing traffic"
+      },
+      {
+        "factor": "Boarding Dwell (2 stops)",
+        "category": "crowd",
+        "impact_minutes": 1.2,
+        "description": "Passenger boarding at intermediate stops (50% bus capacity)"
+      }
+    ],
+    "timestamp": "2026-09-05T16:20:00Z"
+  }
+  ```
+
+### 2. Quick GET Predict ETA
+* **Endpoint**: `/api/ai/predict-eta/{bus_id}/{stop_id}?weather=clear&traffic_level=moderate`
+* **Method**: `GET`
+
+### 3. Model Information & Metrics
+* **Endpoint**: `/api/ai/model-info`
+* **Method**: `GET`
+* **Response**: Returns ML model metadata (`RandomForestRegressor`, $R^2$ accuracy score, MAE, features, and sample size).

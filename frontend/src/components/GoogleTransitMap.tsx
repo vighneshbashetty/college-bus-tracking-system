@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import { busGpsPosition } from "@/useTransitSim";
 import { routes } from "@/data";
 import type { Bus } from "@/types";
@@ -52,23 +52,23 @@ export default function GoogleTransitMap({
   const [mapTypeId, setMapTypeId] = useState<"roadmap" | "satellite" | "hybrid">("hybrid");
 
   // Center around VIT Bhopal Campus
-  const center = useMemo(() => ({ lat: 23.0841, lng: 76.8550 }), []);
+  const center = useMemo(() => ({ lat: 23.0755, lng: 76.8535 }), []);
 
   const uniqueStops = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; lat: number; lng: number }>();
+    const stopsMap: Record<string, { id: string; name: string; lat: number; lng: number }> = {};
     for (const r of routes) {
       for (const s of r.stops) {
-        if (!map.has(s.id)) map.set(s.id, { id: s.id, name: s.name, lat: s.lat, lng: s.lng });
+        if (!stopsMap[s.id]) stopsMap[s.id] = { id: s.id, name: s.name, lat: s.lat, lng: s.lng };
       }
     }
-    return [...map.values()];
+    return Object.values(stopsMap);
   }, []);
 
   const routePolylinePaths = useMemo(() => {
     return routes.map((r) => ({
       id: r.id,
       color: r.color,
-      path: r.stops.map((s) => ({ lat: s.lat, lng: s.lng })),
+      path: (r.path && r.path.length > 0 ? r.path : r.stops).map((s) => ({ lat: s.lat, lng: s.lng })),
     }));
   }, []);
 
@@ -104,7 +104,7 @@ export default function GoogleTransitMap({
                 Google Maps Live GPS • VIT Bhopal
               </div>
               <div className="text-[10px] text-slate-400 font-mono">
-                23.084° N, 76.855° E • Live Campus Route
+                23.076° N, 76.853° E • Live Campus Route
               </div>
             </div>
           </div>
@@ -130,7 +130,7 @@ export default function GoogleTransitMap({
         </div>
 
         {/* Google Map Container */}
-        <Map
+        <GoogleMap
           defaultCenter={center}
           defaultZoom={16}
           mapTypeId={mapTypeId}
@@ -138,12 +138,12 @@ export default function GoogleTransitMap({
           disableDefaultUI={false}
           className="w-full h-full min-h-[440px] flex-1"
         >
-          {/* Draw Route Polylines */}
+          {/* Render Route Polyline */}
           {routePolylinePaths.map((r) => (
             <RoutePolyline key={r.id} path={r.path} color={r.color} />
           ))}
 
-          {/* Render Stop Markers */}
+          {/* Stops Markers */}
           {uniqueStops.map((stop) => {
             const isSelected = selectedStopId === stop.id;
             const isHovered = hoveredStop === stop.id;
@@ -157,34 +157,32 @@ export default function GoogleTransitMap({
                 <div
                   onMouseEnter={() => setHoveredStop(stop.id)}
                   onMouseLeave={() => setHoveredStop(null)}
-                  className={`cursor-pointer transition-all duration-200 ${
-                    isSelected ? "scale-125 z-30" : isHovered ? "scale-110 z-20" : "z-10"
-                  }`}
+                  className="relative cursor-pointer group"
                 >
                   <Pin
-                    background={isSelected ? "#3b82f6" : "#0f172a"}
-                    borderColor={isSelected ? "#ffffff" : "#3b82f6"}
+                    background={isSelected ? "#2563eb" : "#0f172a"}
+                    borderColor={isSelected ? "#60a5fa" : "#3b82f6"}
                     glyphColor={isSelected ? "#ffffff" : "#60a5fa"}
+                    scale={isSelected ? 1.2 : 1.0}
                   />
-                  {(isSelected || isHovered) && (
-                    <InfoWindow position={{ lat: stop.lat, lng: stop.lng }}>
-                      <div className="p-1 text-slate-900 font-sans">
-                        <p className="font-bold text-xs">{stop.name}</p>
-                        <p className="text-[10px] text-slate-600">Bus Stop • Click to see ETAs</p>
-                      </div>
-                    </InfoWindow>
+                  {(isHovered || isSelected) && (
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white px-2.5 py-1 rounded-lg shadow-xl ring-1 ring-white/20 whitespace-nowrap text-xs pointer-events-none z-50">
+                      <p className="font-semibold">{stop.name}</p>
+                      <p className="text-[10px] text-slate-400">Stop</p>
+                    </div>
                   )}
                 </div>
               </AdvancedMarker>
             );
           })}
 
-          {/* Render Live Bus Markers */}
+          {/* Bus Markers */}
           {buses.map((bus) => {
             if (bus.status === "offline") return null;
             const route = routes.find((r) => r.id === bus.routeId) || routes[0];
-            const pos = busGpsPosition(bus, route);
+            const pos = bus.lat && bus.lng ? { lat: bus.lat, lng: bus.lng } : busGpsPosition(bus, route);
             const isSelected = selectedBusId === bus.id;
+            const isHovered = hoveredBus === bus.id;
 
             return (
               <AdvancedMarker
@@ -195,13 +193,30 @@ export default function GoogleTransitMap({
                 <div
                   onMouseEnter={() => setHoveredBus(bus.id)}
                   onMouseLeave={() => setHoveredBus(null)}
-                  className={`relative flex items-center justify-center p-2 rounded-full cursor-pointer shadow-lg transition-transform ${
-                    isSelected ? "bg-amber-500 ring-4 ring-amber-300 scale-125 z-40" : "bg-blue-600 ring-2 ring-white z-30"
-                  }`}
+                  className="relative cursor-pointer transition-transform duration-200"
                 >
-                  <BusIcon className="w-4 h-4 text-white animate-pulse" />
-                  
-                  {(isSelected || hoveredBus === bus.id) && (
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shadow-2xl transition-all ${
+                      isSelected
+                        ? "bg-amber-500 ring-4 ring-amber-300 scale-125"
+                        : "bg-blue-600 ring-2 ring-white hover:scale-110"
+                    }`}
+                  >
+                    <span className="text-sm">🚌</span>
+                  </div>
+
+                  {/* Pulsing indicator */}
+                  <div
+                    className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full ring-2 ring-slate-950 animate-ping ${
+                      bus.status === "on-time"
+                        ? "bg-emerald-400"
+                        : bus.status === "delayed"
+                        ? "bg-amber-400"
+                        : "bg-blue-400"
+                    }`}
+                  />
+
+                  {(isHovered || isSelected) && (
                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white px-3 py-1.5 rounded-xl shadow-xl ring-1 ring-white/20 whitespace-nowrap text-xs pointer-events-none z-50">
                       <div className="font-bold text-blue-400">{bus.id} • {bus.plate}</div>
                       <div className="text-[10px] text-slate-300">Driver: {bus.driver}</div>
@@ -212,7 +227,7 @@ export default function GoogleTransitMap({
               </AdvancedMarker>
             );
           })}
-        </Map>
+        </GoogleMap>
       </APIProvider>
     </div>
   );

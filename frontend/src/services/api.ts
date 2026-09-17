@@ -1,4 +1,5 @@
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// With Vite's proxy configured in vite.config.ts, all /api requests are routed locally automatically
+const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 export interface ApiUser {
   id: number;
@@ -15,12 +16,21 @@ export interface ApiDriver {
   email: string;
 }
 
+export interface ApiLocation {
+  id?: number;
+  bus_id: string;
+  latitude: number;
+  longitude: number;
+  speed: number | null;
+  timestamp: string;
+}
+
 class ApiService {
-  private token: string | null = localStorage.getItem("ct_token");
-  private role: string | null = localStorage.getItem("ct_role");
-  private email: string | null = localStorage.getItem("ct_email");
-  private name: string | null = localStorage.getItem("ct_name");
-  private isConnectedMode: boolean = localStorage.getItem("ct_connected") === "true";
+  private token: string | null = typeof localStorage !== "undefined" ? localStorage.getItem("ct_token") : null;
+  private role: string | null = typeof localStorage !== "undefined" ? localStorage.getItem("ct_role") : null;
+  private email: string | null = typeof localStorage !== "undefined" ? localStorage.getItem("ct_email") : null;
+  private name: string | null = typeof localStorage !== "undefined" ? localStorage.getItem("ct_name") : null;
+  private isConnectedMode: boolean = typeof localStorage !== "undefined" ? localStorage.getItem("ct_connected") === "true" : false;
 
   get tokenValue() {
     return this.token;
@@ -164,11 +174,75 @@ class ApiService {
     });
   }
 
-  async sendLocation(busId: string, x: number, y: number): Promise<any> {
+  async sendLocation(
+    busId: string,
+    latitude: number,
+    longitude: number,
+    speed?: number | null,
+    timestamp?: string
+  ): Promise<any> {
     return this.request("/api/locations", {
       method: "POST",
-      body: JSON.stringify({ bus_id: busId, x, y }),
+      body: JSON.stringify({
+        bus_id: busId,
+        latitude,
+        longitude,
+        speed: speed ?? null,
+        timestamp: timestamp || new Date().toISOString(),
+      }),
     });
+  }
+
+  async getLatestLocation(busId: string): Promise<ApiLocation | null> {
+    try {
+      return await this.request(`/api/locations/${busId}/latest`);
+    } catch {
+      return null;
+    }
+  }
+
+  async getLocations(busId: string): Promise<ApiLocation[]> {
+    return this.request(`/api/locations/${busId}`);
+  }
+
+  async sendChatMessage(message: string, history: any[] = []): Promise<string> {
+    const res = await this.request("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ message, history }),
+    });
+    return res.reply;
+  }
+
+  async getMyPass(): Promise<any> {
+    return this.request("/api/pass/my-pass");
+  }
+
+  async verifyPass(passCode: string, busId: string): Promise<any> {
+    return this.request("/api/pass/verify", {
+      method: "POST",
+      body: JSON.stringify({ pass_code: passCode, bus_id: busId }),
+    });
+  }
+
+  async predictETA(params: {
+    busId: string;
+    stopId: string;
+    weather?: string;
+    trafficLevel?: string;
+  }): Promise<any> {
+    return this.request("/api/ai/predict-eta", {
+      method: "POST",
+      body: JSON.stringify({
+        bus_id: params.busId,
+        stop_id: params.stopId,
+        weather: params.weather || "clear",
+        traffic_level: params.trafficLevel || null,
+      }),
+    });
+  }
+
+  async getModelInfo(): Promise<any> {
+    return this.request("/api/ai/model-info");
   }
 }
 

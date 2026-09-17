@@ -1,17 +1,30 @@
-# CampusTrack — Live College Bus Tracking MVP
+# CampusTrack AI — Live College Bus Tracking & ML ETA Predictor
 
-CampusTrack is a real-time college bus tracking and ETA platform. This MVP features a React frontend, a FastAPI backend, and a PostgreSQL database (with an automatic local SQLite fallback for easier testing and offline demos).
+CampusTrack AI is a real-time college bus tracking and ML-driven ETA platform built for the **Fundamentals in AI and ML** course. This project features a React frontend, a FastAPI backend, a PostgreSQL database, and a custom **Machine Learning Engine (Random Forest)** that predicts transit delays based on weather, traffic, and bus occupancy.
 
 ## Project Structure
 
 ```text
-├── backend/            # FastAPI REST API, auth system, database models, and seeds
+├── backend/            # FastAPI REST API, auth system, ML prediction model, and seeds
+│   └── ml_predictor.py # Scikit-Learn Random Forest ETA prediction engine
 ├── database/           # Raw PostgreSQL schema definition and seed SQL
 ├── frontend/           # React + TypeScript + Tailwind CSS client application
 ├── docs/               # System documentation
+├── statement.md        # Problem statement and project scope
 ├── README.md           # Setup and running instructions (this file)
 └── .gitignore          # Version control ignore lists
 ```
+
+---
+
+## 🧠 Machine Learning Features (AI & ML Course Requirement)
+This project integrates a **Machine Learning Engine** (`backend/ml_predictor.py`) to provide dynamic, intelligent ETAs rather than static calculations.
+
+- **Algorithm**: Random Forest Regressor (Scikit-Learn).
+- **Features Used**: Distance remaining, current speed, stops remaining, hour of the day, day of the week, bus occupancy ratio, weather code, and traffic density.
+- **Training Data**: The model generates and trains on a synthetic, physically grounded dataset of 3,500+ campus transit trips.
+- **Evaluation**: The model calculates $R^2$ score and Mean Absolute Error (MAE) during training.
+- **Inference output**: Provides predicted ETA, confidence score, and decomposes the delay into specific factors (e.g., weather penalty vs. dwell time).
 
 ---
 
@@ -113,3 +126,23 @@ All seeded accounts have the password **`password123`** except the Admin account
 * **Driver R. Sharma**: `driver.sharma@college.edu` (password: `password123`)
 * **Driver M. Iyer**: `driver.iyer@college.edu` (password: `password123`)
 * **Student Aarav**: `student.aarav@college.edu` (password: `password123`)
+
+---
+
+## 🧪 Instructions for Testing
+
+The project includes an automated test suite verifying auth, live bus tracking, digital pass verification, and AI/ML ETA predictions.
+
+To execute the unit and validation tests:
+
+```bash
+# Ensure dependencies including pytest and scikit-learn are installed
+pytest backend/test_api.py -v
+```
+
+All 15 test suites validate:
+- User authentication and role-based access control (Admin, Driver, Student)
+- Real-time GPS location ingestion and telemetry updates
+- Student digital pass generation and QR validation
+- **AI Model Diagnostics**: Verification of $R^2$ score ($> 0.90$), feature vector count, and training parameters
+- **Dynamic ETA Prediction**: Inference across clear and simulated adverse weather/traffic conditions

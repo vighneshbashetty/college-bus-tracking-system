@@ -1,23 +1,33 @@
 import os
-from datetime import timedelta
+import sys
+from pathlib import Path
+
+# Ensure backend directory is prioritized in sys.path
+backend_dir = Path(__file__).resolve().parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+import asyncio
+import random
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .database import engine, get_db, Base
-from . import models, schemas, auth
+from database import engine, get_db, SessionLocal, Base
+import models, schemas, auth
 
 # Create database tables automatically (excellent fallback for SQLite)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="CampusTrack API", description="FastAPI Backend for College Bus Tracking MVP")
 
-# Configure CORS so the React frontend can communicate with the backend
+# Configure CORS so the React frontend (and mobile phones on local network) can communicate with the backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -431,25 +441,251 @@ def record_location(
         if not driver_profile or driver_profile.bus_id != loc_in.bus_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only update locations for your assigned bus"
+                detail=f"You are only authorized to update locations for your assigned bus ({driver_profile.bus_id if driver_profile else 'None'})"
             )
+    elif current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to post bus locations"
+        )
             
     new_loc = models.Location(
         bus_id=loc_in.bus_id,
-        x=loc_in.x,
-        y=loc_in.y
+        latitude=loc_in.latitude,
+        longitude=loc_in.longitude,
+        speed=loc_in.speed
     )
     db.add(new_loc)
+    
+    # If bus is marked offline, automatically activate it when live GPS starts
+    if bus.status == "offline":
+        bus.status = "on-time"
+    if loc_in.speed is not None and loc_in.speed > 0:
+        bus.speed = float(loc_in.speed)
+        
     db.commit()
     db.refresh(new_loc)
     return new_loc
+
+@app.get("/api/locations/{bus_id}/latest", response_model=schemas.LocationLatestResponse)
+def get_latest_location(bus_id: str, db: Session = Depends(get_db)):
+    # Retrieve the single latest GPS location recorded for this bus
+    latest_loc = db.query(models.Location)\
+                   .filter(models.Location.bus_id == bus_id)\
+                   .order_by(models.Location.timestamp.desc(), models.Location.id.desc())\
+                   .first()
+    if not latest_loc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No location records found for bus {bus_id}"
+        )
+    return schemas.LocationLatestResponse(
+        bus_id=latest_loc.bus_id,
+        latitude=latest_loc.latitude,
+        longitude=latest_loc.longitude,
+        speed=latest_loc.speed,
+        timestamp=latest_loc.timestamp
+    )
 
 @app.get("/api/locations/{bus_id}", response_model=List[schemas.LocationResponse])
 def get_locations(bus_id: str, db: Session = Depends(get_db)):
     # Return last 50 coordinates for the bus route history
     locations = db.query(models.Location)\
                   .filter(models.Location.bus_id == bus_id)\
-                  .order_by(models.Location.timestamp.desc())\
+                  .order_by(models.Location.timestamp.desc(), models.Location.id.desc())\
                   .limit(50)\
                   .all()
     return locations[::-1] # Reverse to get chronological order
+
+# --- AI Chatbot Endpoints ---
+
+@app.post("/api/chat")
+def chat_endpoint(req: schemas.ChatRequest, db: Session = Depends(get_db)):
+    import chat
+    response_text = chat.generate_chat_response(req.message, db, req.history)
+    return {"reply": response_text}
+
+# --- AI ML Delay & ETA Prediction Endpoints ---
+
+@app.post("/api/ai/predict-eta", response_model=schemas.AIPredictETAResponse)
+def predict_eta_post(
+    req: schemas.AIPredictETARequest,
+    db: Session = Depends(get_db)
+):
+    from ml_predictor import predictor
+    bus = db.query(models.Bus).filter(models.Bus.id == req.bus_id).first()
+    if not bus:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bus {req.bus_id} not found"
+        )
+    return predictor.predict_for_bus(
+        bus=bus,
+        stop_id=req.stop_id,
+        weather=req.weather or "clear",
+        traffic_level=req.traffic_level
+    )
+
+@app.get("/api/ai/predict-eta/{bus_id}/{stop_id}", response_model=schemas.AIPredictETAResponse)
+def predict_eta_get(
+    bus_id: str,
+    stop_id: str,
+    weather: Optional[str] = "clear",
+    traffic_level: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    from ml_predictor import predictor
+    bus = db.query(models.Bus).filter(models.Bus.id == bus_id).first()
+    if not bus:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bus {bus_id} not found"
+        )
+    return predictor.predict_for_bus(
+        bus=bus,
+        stop_id=stop_id,
+        weather=weather or "clear",
+        traffic_level=traffic_level
+    )
+
+@app.get("/api/ai/model-info", response_model=schemas.AIModelInfoResponse)
+def get_model_info():
+    from ml_predictor import predictor
+    m = predictor.metrics
+    return schemas.AIModelInfoResponse(
+        model_name=m.get("model_name", "CampusTrack Transit Random Forest"),
+        algorithm=m.get("algorithm", "RandomForestRegressor"),
+        features=m.get("features", []),
+        training_samples=m.get("training_samples", 3500),
+        r2_score=m.get("r2_score", 0.94),
+        mae_minutes=m.get("mae_minutes", 0.4),
+        last_trained_at=m.get("last_trained_at", ""),
+        status=m.get("status", "ready")
+    )
+
+@app.post("/api/ai/retrain", response_model=schemas.AIModelInfoResponse)
+def retrain_model(
+    admin: models.User = Depends(auth.get_current_active_admin)
+):
+    from ml_predictor import predictor
+    metrics = predictor.train()
+    return schemas.AIModelInfoResponse(
+        model_name=metrics.get("model_name", "CampusTrack Transit Random Forest"),
+        algorithm=metrics.get("algorithm", "RandomForestRegressor"),
+        features=metrics.get("features", []),
+        training_samples=metrics.get("training_samples", 3500),
+        r2_score=metrics.get("r2_score", 0.94),
+        mae_minutes=metrics.get("mae_minutes", 0.4),
+        last_trained_at=metrics.get("last_trained_at", ""),
+        status=metrics.get("status", "ready")
+    )
+
+
+# --- Digital Pass Endpoints ---
+
+@app.post("/api/pass/generate", response_model=schemas.BusPassResponse)
+def generate_pass(
+    req: schemas.PassGenerateRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    import secrets
+    existing_pass = db.query(models.BusPass).filter(
+        models.BusPass.user_id == current_user.id,
+        models.BusPass.status == "active"
+    ).first()
+
+    if existing_pass:
+        return existing_pass
+
+    random_code = f"PASS-{datetime.now().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+    new_pass = models.BusPass(
+        user_id=current_user.id,
+        pass_code=random_code,
+        route_id=req.route_id or "ALL",
+        student_name=current_user.name,
+        student_email=current_user.email,
+        status="active"
+    )
+    db.add(new_pass)
+    db.commit()
+    db.refresh(new_pass)
+    return new_pass
+
+@app.get("/api/pass/my-pass", response_model=schemas.BusPassResponse)
+def get_my_pass(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    import secrets
+    pass_item = db.query(models.BusPass).filter(
+        models.BusPass.user_id == current_user.id,
+        models.BusPass.status == "active"
+    ).order_by(models.BusPass.created_at.desc()).first()
+
+    if not pass_item:
+        random_code = f"PASS-{datetime.now().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+        pass_item = models.BusPass(
+            user_id=current_user.id,
+            pass_code=random_code,
+            route_id="ALL",
+            student_name=current_user.name,
+            student_email=current_user.email,
+            status="active"
+        )
+        db.add(pass_item)
+        db.commit()
+        db.refresh(pass_item)
+    return pass_item
+
+@app.post("/api/pass/verify", response_model=schemas.PassVerifyResponse)
+def verify_pass(
+    req: schemas.PassVerifyRequest,
+    db: Session = Depends(get_db)
+):
+    pass_item = db.query(models.BusPass).filter(
+        models.BusPass.pass_code == req.pass_code
+    ).first()
+
+    if not pass_item:
+        return schemas.PassVerifyResponse(
+            success=False,
+            message=f"Invalid Pass Code '{req.pass_code}'. Not found in system records."
+        )
+
+    if pass_item.status == "boarded":
+        scanned_time = pass_item.scanned_at.strftime('%H:%M') if pass_item.scanned_at else 'earlier'
+        return schemas.PassVerifyResponse(
+            success=False,
+            message=f"Pass already scanned for {pass_item.student_name} at {scanned_time}.",
+            student_name=pass_item.student_name,
+            route_id=pass_item.route_id,
+            bus_id=pass_item.scanned_by_bus_id
+        )
+
+    pass_item.status = "boarded"
+    pass_item.scanned_at = datetime.now(timezone.utc)
+    pass_item.scanned_by_bus_id = req.bus_id
+
+    bus = db.query(models.Bus).filter(models.Bus.id == req.bus_id).first()
+    new_occupancy = None
+    if bus:
+        if bus.occupancy < bus.capacity:
+            bus.occupancy += 1
+        new_occupancy = bus.occupancy
+
+    db.commit()
+
+    return schemas.PassVerifyResponse(
+        success=True,
+        message=f"Pass verified! Welcome aboard, {pass_item.student_name}.",
+        student_name=pass_item.student_name,
+        route_id=pass_item.route_id,
+        bus_id=req.bus_id,
+        occupancy=new_occupancy
+    )
+
+@app.get("/api/pass/logs", response_model=List[schemas.BusPassResponse])
+def get_pass_logs(db: Session = Depends(get_db)):
+    return db.query(models.BusPass).order_by(models.BusPass.created_at.desc()).limit(100).all()
+

@@ -1,14 +1,17 @@
 import os
 from pathlib import Path
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 
+BASE_DIR = Path(__file__).resolve().parent
 # Load .env from the same directory as this file (backend/)
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(BASE_DIR / ".env")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./campustrack.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'campustrack.db'}")
+if DATABASE_URL.startswith("sqlite:///./"):
+    rel_path = DATABASE_URL[len("sqlite:///./"):]
+    DATABASE_URL = f"sqlite:///{BASE_DIR / rel_path}"
 
 # Connect args specific to SQLite (not needed/supported for Postgres)
 connect_args = {}

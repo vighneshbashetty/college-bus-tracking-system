@@ -3,8 +3,8 @@ import os
 # Add current directory to path so imports work
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.database import SessionLocal, Base, engine
-from backend import models, auth
+from database import SessionLocal, Base, engine
+import models, auth
 
 def seed():
     # Make sure tables exist
@@ -90,8 +90,22 @@ def seed():
                     if existing.bus_id != da["bus_id"]:
                         print(f"Updating driver profile assignment for {user.name} to {da['bus_id']}")
                         existing.bus_id = da["bus_id"]
-                        db.commit()
-                        
+        # 4. Seed initial bus passes for QR code verification
+        initial_passes = [
+            {"pass_code": "PASS-20260903-AARAV88", "student_name": "Aarav", "student_email": "student.aarav@college.edu", "route_id": "R1", "status": "active"},
+            {"pass_code": "PASS-20260903-DIYA88", "student_name": "Diya", "student_email": "student.diya@college.edu", "route_id": "R1", "status": "active"}
+        ]
+        for p in initial_passes:
+            user = users_by_email.get(p["student_email"])
+            if not user:
+                continue
+            existing_pass = db.query(models.BusPass).filter(models.BusPass.pass_code == p["pass_code"]).first()
+            if not existing_pass:
+                print(f"Creating bus pass: {p['pass_code']}")
+                new_pass = models.BusPass(user_id=user.id, **p)
+                db.add(new_pass)
+                db.commit()
+
         print("Database seeded successfully!")
     except Exception as e:
         print(f"Error seeding database: {e}")

@@ -15,7 +15,8 @@ interface Props {
 function polyPoints(routeId: string) {
   const r = routes.find((r) => r.id === routeId);
   if (!r) return "";
-  return r.stops.map((s) => `${s.x},${s.y}`).join(" ");
+  const pts = r.path && r.path.length > 0 ? r.path : r.stops;
+  return pts.map((s) => `${s.x},${s.y}`).join(" ");
 }
 
 export default function TransitMap({ buses, selectedStopId, onSelectStop, selectedBusId, onSelectBus }: Props) {
@@ -26,7 +27,7 @@ export default function TransitMap({ buses, selectedStopId, onSelectStop, select
     const map = new Map<string, { id: string; name: string; x: number; y: number }>();
     for (const r of routes) {
       for (const s of r.stops) {
-        if (!map.has(s.id)) map.set(s.id, s);
+        if (!map.has(s.id)) map.set(s.id, { id: s.id, name: s.name, x: s.x ?? 50, y: s.y ?? 50 });
       }
     }
     return [...map.values()];
@@ -43,7 +44,7 @@ export default function TransitMap({ buses, selectedStopId, onSelectStop, select
               VIT Bhopal University Campus
             </div>
             <div className="text-[10px] text-slate-400 font-mono">
-              23.084° N, 76.852° E · Fixed Campus Transit
+              23.076° N, 76.853° E · Internal Campus Transit
             </div>
           </div>
         </div>
@@ -150,52 +151,53 @@ export default function TransitMap({ buses, selectedStopId, onSelectStop, select
 
         {/* Campus Internal Roads (Background Base Network) */}
         <g stroke="#1e293b" strokeLinecap="round" strokeLinejoin="round">
-          {/* Main Entrance Avenue */}
-          <polyline points="18,88 18,82 36,64 52,52 70,44 84,26" strokeWidth="4" />
-          <polyline points="52,52 60,18 30,32 36,64" strokeWidth="3" />
-          <polyline points="18,82 28,82 36,64" strokeWidth="2.5" />
+          {/* Main Internal Avenue: AB1 -> Underbelly -> South Junction */}
+          <polyline points="22,25 22,57" strokeWidth="4" />
+          {/* Avenue East: Junction -> Girls Hostels -> AB2 -> Boys Hostels */}
+          <polyline points="22,57 32,57 40,56 52,67 78,67" strokeWidth="3.5" />
+          {/* Link to Main Gate south */}
+          <polyline points="22,57 22,86" strokeWidth="2.5" />
           {/* Secondary road links */}
-          <line x1="70" y1="44" x2="60" y2="18" strokeWidth="2.5" />
-          <line x1="84" y1="26" x2="62" y2="18" strokeWidth="2.5" />
+          <line x1="52" y1="67" x2="62" y2="18" strokeWidth="2" />
+          <line x1="78" y1="67" x2="62" y2="18" strokeWidth="2" />
         </g>
 
         {/* Campus Landmark Buildings & Footprints */}
         {/* 1. Main Welcome Gate */}
         <g>
-          <rect x="14" y="80" width="8" height="4" rx="0.5" fill="#1e293b" stroke="#3b82f6" strokeWidth="0.3" opacity="0.8" />
-          <text x="18" y="86.5" fill="#93c5fd" fontSize="1.6" textAnchor="middle" fontWeight="500">Main Gate</text>
+          <rect x="17" y="83" width="10" height="4" rx="0.5" fill="#1e293b" stroke="#3b82f6" strokeWidth="0.3" opacity="0.8" />
+          <text x="22" y="89" fill="#93c5fd" fontSize="1.6" textAnchor="middle" fontWeight="500">Main Gate</text>
         </g>
 
-        {/* 2. Academic Block (AB) */}
+        {/* 2. AB1 (Academic Block 1) */}
         <g>
-          <rect x="31" y="59" width="10" height="7" rx="0.8" fill="#1e293b" stroke="#60a5fa" strokeWidth="0.4" />
-          <rect x="33" y="61" width="6" height="3" fill="#0f172a" opacity="0.6" />
-          <text x="36" y="57.5" fill="#93c5fd" fontSize="1.7" textAnchor="middle" fontWeight="600">Academic Block (AB)</text>
+          <rect x="16" y="20" width="12" height="6.5" rx="0.8" fill="#1e293b" stroke="#60a5fa" strokeWidth="0.4" />
+          <rect x="18" y="22" width="8" height="2.5" fill="#0f172a" opacity="0.6" />
+          <text x="22" y="18.5" fill="#93c5fd" fontSize="1.7" textAnchor="middle" fontWeight="600">Academic Block 1 (AB1)</text>
         </g>
 
-        {/* 3. Central Library & Admin */}
+        {/* 3. Underbelly / Food Court */}
         <g>
-          <polygon points="52,48 57,52 52,56 47,52" fill="#1e293b" stroke="#60a5fa" strokeWidth="0.35" />
-          <text x="52" y="46.5" fill="#94a3b8" fontSize="1.6" textAnchor="middle">Central Admin & Library</text>
+          <rect x="17" y="29" width="10" height="5" rx="0.8" fill="#1e293b" stroke="#f59e0b" strokeWidth="0.35" opacity="0.85" />
+          <text x="22" y="36" fill="#fcd34d" fontSize="1.5" textAnchor="middle">Underbelly</text>
         </g>
 
-        {/* 4. Food Court & Underbelly */}
+        {/* 4. Girls Hostel Complex */}
         <g>
-          <rect x="67" y="41" width="7" height="6" rx="0.8" fill="#1e293b" stroke="#f59e0b" strokeWidth="0.35" opacity="0.85" />
-          <text x="70.5" y="39.5" fill="#fcd34d" fontSize="1.6" textAnchor="middle">Food Court & Underbelly</text>
+          <rect x="29" y="47" width="14" height="7" rx="0.6" fill="#1e293b" stroke="#f472b6" strokeWidth="0.35" />
+          <text x="36" y="45" fill="#fbcfe8" fontSize="1.6" textAnchor="middle">Girls Hostel Complex</text>
         </g>
 
-        {/* 5. Boys Hostel Complex */}
+        {/* 5. AB2 (Academic Block 2) */}
         <g>
-          <rect x="80" y="21" width="8" height="7" rx="0.6" fill="#1e293b" stroke="#a78bfa" strokeWidth="0.35" />
-          <rect x="81.5" y="29.5" width="6" height="4" rx="0.6" fill="#1e293b" stroke="#a78bfa" strokeWidth="0.35" opacity="0.7" />
-          <text x="84" y="19" fill="#c4b5fd" fontSize="1.6" textAnchor="middle">Boys Hostels (Blocks 1-3)</text>
+          <rect x="46" y="70" width="13" height="6.5" rx="0.8" fill="#1e293b" stroke="#60a5fa" strokeWidth="0.4" />
+          <text x="52.5" y="79" fill="#93c5fd" fontSize="1.6" textAnchor="middle" fontWeight="600">AB2 (Academic Block 2)</text>
         </g>
 
-        {/* 6. Girls Hostel Complex */}
+        {/* 6. Boys Hostel Complex */}
         <g>
-          <rect x="25" y="28" width="9" height="7" rx="0.6" fill="#1e293b" stroke="#f472b6" strokeWidth="0.35" />
-          <text x="29.5" y="26" fill="#fbcfe8" fontSize="1.6" textAnchor="middle">Girls Hostel Complex</text>
+          <rect x="73" y="70" width="14" height="7" rx="0.6" fill="#1e293b" stroke="#a78bfa" strokeWidth="0.35" />
+          <text x="80" y="79.5" fill="#c4b5fd" fontSize="1.6" textAnchor="middle">Boys Hostels (Block 1 & 3)</text>
         </g>
 
         {/* Transit Fixed Route Polyline */}
@@ -384,7 +386,7 @@ export default function TransitMap({ buses, selectedStopId, onSelectStop, select
             </div>
           ))}
           <div className="flex items-center gap-1.5 text-slate-400 text-[11px] border-l border-white/10 pl-3">
-            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Predefined Stops (7)
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Predefined Stops (6)
           </div>
         </div>
 
